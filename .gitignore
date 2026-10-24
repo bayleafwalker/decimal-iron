@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.pyc
+build/
+dist/
+*.vcd
+*.fst
+*.bit
+*.bin
+*.log
