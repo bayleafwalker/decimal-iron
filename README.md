@@ -24,6 +24,8 @@ python -m decimal_iron serve
 
 Open <http://127.0.0.1:8080/>. The browser is a 24×80 renderer for the processor's byte stream. It sends keyboard bytes; it has no payment or ledger API. Use `Ctrl+C` to stop the server. The append-only journal is written to `data/ledger.jsonl` and replayed at startup.
 
+The server has no authentication or TLS; keep it on loopback or a trusted private network. Setting `--host` to a non-loopback address exposes the synthetic command interface to reachable clients. A file-backed journal is single-process: the first server holds an exclusive OS lock until it stops, and a second server using the same journal path is refused.
+
 Run the scripted end-of-day demonstration:
 
 ```sh
