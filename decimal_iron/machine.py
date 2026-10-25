@@ -100,6 +100,10 @@ class DecimalMachine:
     def journal_head(self) -> str:
         return self.journal.head
 
+    def close(self) -> None:
+        """Release the exclusive lock held by this machine's file-backed journal."""
+        self.journal.close()
+
     def _replay(self) -> None:
         with self._lock:
             for entry in self.journal.entries:
