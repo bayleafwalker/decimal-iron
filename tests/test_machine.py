@@ -12,6 +12,7 @@ class MachineTests(unittest.TestCase):
         self.machine = DecimalMachine(self.journal)
 
     def tearDown(self):
+        self.machine.close()
         self.temp.cleanup()
 
     def open_day(self):
@@ -80,14 +81,19 @@ class MachineTests(unittest.TestCase):
         report = self.machine.report_text()
         positions = dict(self.machine.positions)
 
+        self.machine.close()
         replayed = DecimalMachine(self.journal)
-        self.assertEqual(replayed.positions, positions)
-        self.assertEqual(replayed.report_text(), report)
-        self.assertEqual(replayed.journal_head, self.machine.journal_head)
-        self.assertEqual(replayed.phase, "CLOSED")
+        try:
+            self.assertEqual(replayed.positions, positions)
+            self.assertEqual(replayed.report_text(), report)
+            self.assertEqual(replayed.journal_head, self.machine.journal_head)
+            self.assertEqual(replayed.phase, "CLOSED")
+        finally:
+            replayed.close()
 
     def test_tampered_journal_is_rejected(self):
         self.open_day()
+        self.machine.close()
         raw = self.journal.read_text(encoding="ascii").replace('"OPEN"', '"CLOSED"')
         self.journal.write_text(raw, encoding="ascii")
         with self.assertRaisesRegex(RuntimeError, "hash mismatch"):
