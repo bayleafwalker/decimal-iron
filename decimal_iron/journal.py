@@ -90,7 +90,7 @@ class Journal:
         }
         digest = hashlib.sha256(canonical_json(body)).hexdigest()
         entry = {**body, "hash": digest}
-        encoded = canonical_json(entry) + b"\\n"
+        encoded = canonical_json(entry) + b"\n"
         if self.path is not None:
             if self._fd is None:
                 raise RuntimeError("journal is closed")
