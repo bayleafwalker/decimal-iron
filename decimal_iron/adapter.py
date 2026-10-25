@@ -65,6 +65,15 @@ class TerminalPaymentAdapter:
         self.terminal.write(command.encode("ascii") + b"\r")
         return result_line(self.terminal.read())
 
+    def processor_status(self) -> str:
+        """Read the phase through the same serialized operator terminal cursor."""
+        with self._cursor:
+            response = self._exchange("STATUS")
+        parts = response.split()
+        if len(parts) != 3 or parts[:2] != ["RESULT", "STATUS"]:
+            raise UnknownOutcome(f"unexpected processor status response: {response}")
+        return parts[2]
+
     @staticmethod
     def _receipt(line: str, payment_id: str, resolution: str) -> PaymentReceipt:
         parts = line.split()

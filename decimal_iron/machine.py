@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 import threading
@@ -10,6 +11,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from .cpu import ACCOUNT_CAPACITY, CPUFault, ReferenceCPU
 from .journal import Journal, JournalCorruption
 
 MAX_PAYMENT_MINOR = 5_000_000  # FIM 50,000.00; hard processor limit.
@@ -76,6 +78,7 @@ class DecimalMachine:
         if overdraft_limit_minor < 0:
             raise ValueError("overdraft limit must be non-negative")
         self.journal = Journal(journal_path)
+        self.cpu = ReferenceCPU()
         self.overdraft_limit_minor = overdraft_limit_minor
         self._lock = threading.RLock()
         self.phase = "CLOSED"
@@ -129,15 +132,15 @@ class DecimalMachine:
         elif kind == "PAYMENT_POSTED":
             source, destination = payload["source"], payload["destination"]
             amount = payload["amount_minor"]
-            self.positions[source] = self.positions.get(source, 0) - amount
-            self.positions[destination] = self.positions.get(destination, 0) + amount
+            self.cpu.transfer(source, destination, amount)
+            self.positions = self.cpu.account_balances()
             self.transactions[payload["id"]] = {**payload, "seq": entry["seq"]}
             self.reconciliation_current = False
         elif kind == "PAYMENT_REVERSED":
             original = self.transactions[payload["original_id"]]
             amount = payload["amount_minor"]
-            self.positions[original["source"]] = self.positions.get(original["source"], 0) + amount
-            self.positions[original["destination"]] = self.positions.get(original["destination"], 0) - amount
+            self.cpu.transfer(original["destination"], original["source"], amount)
+            self.positions = self.cpu.account_balances()
             self.reversals[payload["reversal_id"]] = {**payload, "seq": entry["seq"]}
             self.reversed_originals.add(payload["original_id"])
             self.reconciliation_current = False
@@ -147,8 +150,11 @@ class DecimalMachine:
             self.settlement_net_before = dict(payload["net_positions"])
             for item in payload["adjustments"]:
                 member, delta = item["member"], item["delta_minor"]
-                self.positions[member] = self.positions.get(member, 0) + delta
-                self.positions["SETTLEMENT"] = self.positions.get("SETTLEMENT", 0) - delta
+                if delta > 0:
+                    self.cpu.transfer("SETTLEMENT", member, delta)
+                elif delta < 0:
+                    self.cpu.transfer(member, "SETTLEMENT", -delta)
+                self.positions = self.cpu.account_balances()
             self.phase = "SETTLED"
             self.reconciliation_current = False
         elif kind == "RECON_BREAK_INJECTED":
@@ -298,6 +304,14 @@ class DecimalMachine:
             raise RuleViolation("DAY_NOT_OPEN", "new payments are accepted only while the business day is OPEN")
         if self.positions.get(source, 0) - amount < -self.overdraft_limit_minor and not override_reason.strip():
             raise RuleViolation("OVERRIDE_REASON_REQUIRED", "member debit limit exceeded; provide a non-empty override reason")
+        members = set(self.cpu.account_addresses) - {"SETTLEMENT"}
+        members.update((source, destination))
+        if len(members) > ACCOUNT_CAPACITY - 1:
+            raise RuleViolation("MEMORY_ACCOUNT_LIMIT", "reference processor has no remaining participant position words")
+        try:
+            self.cpu.preview_transfer(source, destination, amount)
+        except CPUFault as exc:
+            raise RuleViolation("DECIMAL_PROCESSOR_LIMIT", str(exc)) from exc
         entry = self._append("PAYMENT_POSTED", {**identity, "business_date": self.business_date})
         return CommandResult("POSTED", "payment durably posted", {"id": payment_id, "seq": entry["seq"]})
 
@@ -319,6 +333,10 @@ class DecimalMachine:
             raise RuleViolation("ORIGINAL_NOT_FOUND", "original payment does not exist")
         if original_id in self.reversed_originals:
             raise RuleViolation("ALREADY_REVERSED", "payment already has a compensating reversal")
+        try:
+            self.cpu.preview_transfer(original["destination"], original["source"], original["amount_minor"])
+        except CPUFault as exc:
+            raise RuleViolation("DECIMAL_PROCESSOR_LIMIT", str(exc)) from exc
         payload = {
             "original_id": original_id,
             "reversal_id": reversal_id,
@@ -338,6 +356,16 @@ class DecimalMachine:
             raise RuleViolation("LEDGER_NOT_CONSERVED", "participant positions do not sum to zero")
         net = {name: self.positions.get(name, 0) for name in members}
         adjustments = [{"member": name, "delta_minor": -net[name]} for name in members if net[name] != 0]
+        trial_cpu = copy.deepcopy(self.cpu)
+        try:
+            for item in adjustments:
+                delta = item["delta_minor"]
+                if delta > 0:
+                    trial_cpu.transfer("SETTLEMENT", item["member"], delta)
+                else:
+                    trial_cpu.transfer(item["member"], "SETTLEMENT", -delta)
+        except CPUFault as exc:
+            raise RuleViolation("DECIMAL_PROCESSOR_LIMIT", str(exc)) from exc
         entry = self._append(
             "DAY_SETTLED",
             {"business_date": self.business_date, "net_positions": net, "adjustments": adjustments},

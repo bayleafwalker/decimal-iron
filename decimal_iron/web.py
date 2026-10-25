@@ -4,40 +4,25 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import threading
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from .machine import DecimalMachine
+from .panel import PanelController, PanelError
 from .terminal import TerminalSession
 
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _MAX_FRAME = 64 * 1024
 
 
-class _TerminalGate:
-    def __init__(self) -> None:
-        self.lock = threading.Lock()
-        self.active = False
-
-    def acquire(self) -> bool:
-        with self.lock:
-            if self.active:
-                return False
-            self.active = True
-            return True
-
-    def release(self) -> None:
-        with self.lock:
-            self.active = False
-
-
-def make_handler(machine: DecimalMachine, gate: _TerminalGate | None = None):
-    gate = gate or _TerminalGate()
+def make_handler(machine: DecimalMachine):
+    panel = PanelController(machine)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "DecimalIron/0.1"
+        protocol_version = "HTTP/1.1"
 
         def log_message(self, format: str, *args: object) -> None:
             print(f"[{self.log_date_time_string()}] {format % args}")
@@ -47,10 +32,19 @@ def make_handler(machine: DecimalMachine, gate: _TerminalGate | None = None):
             if path == "/terminal":
                 self._websocket()
                 return
+            if path == "/healthz":
+                self._send_json(200, {"status": "ok", "processor": machine.summary()["phase"]})
+                return
+            if path == "/panel/state":
+                self._send_json(200, panel.snapshot())
+                return
             assets = {
                 "/": ("index.html", "text/html; charset=utf-8"),
+                "/panel": ("panel.html", "text/html; charset=utf-8"),
                 "/static/style.css": ("style.css", "text/css; charset=utf-8"),
                 "/static/terminal.js": ("terminal.js", "text/javascript; charset=utf-8"),
+                "/static/panel.css": ("panel.css", "text/css; charset=utf-8"),
+                "/static/panel.js": ("panel.js", "text/javascript; charset=utf-8"),
             }
             if path not in assets:
                 self.send_error(404)
@@ -65,12 +59,37 @@ def make_handler(machine: DecimalMachine, gate: _TerminalGate | None = None):
             self.end_headers()
             self.wfile.write(content)
 
+        def do_POST(self) -> None:
+            if urlsplit(self.path).path != "/panel/control":
+                self.send_error(404)
+                return
+            length = self.headers.get("Content-Length")
+            try:
+                size = int(length or "0")
+                if not 1 <= size <= 4096:
+                    raise PanelError("BAD_REQUEST_SIZE", "panel control body must be 1..4096 bytes")
+                request = json.loads(self.rfile.read(size))
+                if not isinstance(request, dict):
+                    raise PanelError("BAD_REQUEST", "panel control body must be an object")
+                self._send_json(200, panel.control(request))
+            except PanelError as exc:
+                self._send_json(400, {"error": exc.code, "message": str(exc)})
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                self._send_json(400, {"error": "BAD_JSON", "message": "panel body must be valid JSON"})
+
+        def _send_json(self, status: int, value: object) -> None:
+            payload = json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(payload)
+
         def _websocket(self) -> None:
             if self.headers.get("Upgrade", "").lower() != "websocket":
                 self.send_error(400, "WebSocket upgrade required")
-                return
-            if not gate.acquire():
-                self.send_error(409, "The single terminal cursor is already in use")
                 return
             try:
                 key = self.headers.get("Sec-WebSocket-Key")
@@ -115,8 +134,6 @@ def make_handler(machine: DecimalMachine, gate: _TerminalGate | None = None):
                         self._send_frame(output)
             except (ConnectionError, OSError, ValueError):
                 return
-            finally:
-                gate.release()
 
         def _read_frame(self) -> tuple[int, bytes]:
             header = self.rfile.read(2)

@@ -1,0 +1,307 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: decimal-iron
+  labels:
+    app.kubernetes.io/part-of: decimal-iron
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: processor-journal
+  namespace: decimal-iron
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decimal-iron-processor
+  namespace: decimal-iron
+spec:
+  selector:
+    app: decimal-iron-processor
+  ports:
+    - name: terminal
+      port: 8080
+      targetPort: terminal
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decimal-iron-processor
+  namespace: decimal-iron
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decimal-iron-processor
+  template:
+    metadata:
+      labels:
+        app: decimal-iron-processor
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: processor
+          image: decimal-iron:dev
+          imagePullPolicy: IfNotPresent
+          args: ["serve", "--host", "0.0.0.0", "--port", "8080", "--journal", "/var/lib/decimal-iron/ledger.jsonl"]
+          ports:
+            - name: terminal
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: terminal
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: terminal
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: journal
+              mountPath: /var/lib/decimal-iron
+      volumes:
+        - name: journal
+          persistentVolumeClaim:
+            claimName: processor-journal
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gateway-outbox
+  namespace: decimal-iron
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decimal-iron-gateway
+  namespace: decimal-iron
+spec:
+  selector:
+    app: decimal-iron-gateway
+  ports:
+    - name: api
+      port: 8090
+      targetPort: api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decimal-iron-gateway
+  namespace: decimal-iron
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decimal-iron-gateway
+  template:
+    metadata:
+      labels:
+        app: decimal-iron-gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: gateway
+          image: decimal-iron:dev
+          imagePullPolicy: IfNotPresent
+          args: ["gateway", "--host", "0.0.0.0", "--port", "8090", "--terminal-url", "ws://decimal-iron-processor:8080/terminal", "--max-queue", "32", "--state", "/var/lib/decimal-iron-gateway/jobs.sqlite3"]
+          ports:
+            - name: api
+              containerPort: 8090
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: outbox
+              mountPath: /var/lib/decimal-iron-gateway
+      volumes:
+        - name: outbox
+          persistentVolumeClaim:
+            claimName: gateway-outbox
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decimal-iron-bank
+  namespace: decimal-iron
+spec:
+  clusterIP: None
+  selector:
+    app: decimal-iron-bank
+  ports:
+    - name: unused
+      port: 1
+      targetPort: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bank
+  namespace: decimal-iron
+spec:
+  serviceName: decimal-iron-bank
+  replicas: 3
+  selector:
+    matchLabels:
+      app: decimal-iron-bank
+  template:
+    metadata:
+      labels:
+        app: decimal-iron-bank
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: synthetic-bank
+          image: decimal-iron:dev
+          imagePullPolicy: IfNotPresent
+          args: ["bank", "--gateway-url", "http://decimal-iron-gateway:8090", "--bank-id", "$(POD_NAME)", "--max-requests", "12", "--interval-seconds", "2", "--seed", "$(POD_NAME)", "--wait-for-open-seconds", "86400", "--idle-seconds", "86400"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: processor-terminal-only-from-gateway
+  namespace: decimal-iron
+spec:
+  podSelector:
+    matchLabels:
+      app: decimal-iron-processor
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: decimal-iron-gateway
+      ports:
+        - protocol: TCP
+          port: terminal
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-from-banks-to-processor
+  namespace: decimal-iron
+spec:
+  podSelector:
+    matchLabels:
+      app: decimal-iron-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: decimal-iron-bank
+      ports:
+        - protocol: TCP
+          port: api
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: decimal-iron-processor
+      ports:
+        - protocol: TCP
+          port: terminal
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: banks-only-to-gateway
+  namespace: decimal-iron
+spec:
+  podSelector:
+    matchLabels:
+      app: decimal-iron-bank
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: decimal-iron-gateway
+      ports:
+        - protocol: TCP
+          port: api
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

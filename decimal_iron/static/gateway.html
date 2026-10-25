@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Decimal Iron · Gateway</title>
+    <link rel="stylesheet" href="/static/gateway.css">
+    <script src="/static/gateway.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">DECIMAL IRON / 2026 OPERATIONS</p>
+        <h1>Clearing gateway</h1>
+        <p class="subhead">Delivery projection from the gateway outbox. The processor journal remains authoritative.</p>
+      </header>
+      <section class="statusbar" aria-live="polite">
+        <div><span class="label">Gateway</span><strong id="health">CONNECTING</strong></div>
+        <div><span class="label">Processor day</span><strong id="phase">UNKNOWN</strong></div>
+        <div><span class="label">Queue</span><strong id="queue">—</strong></div>
+        <div><span class="label">Updated</span><strong id="updated">—</strong></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">RECENT REQUESTS</p>
+            <h2>Payment delivery</h2>
+          </div>
+          <span id="count" class="count">0 records</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Payment ID</th><th>State</th><th>Journal seq</th><th>Protocol route</th><th>Details</th></tr></thead>
+            <tbody id="rows"><tr><td colspan="5" class="empty">Waiting for gateway data…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <footer>All traffic is synthetic. This view reads delivery state only; it has no posting controls.</footer>
+    </main>
+  </body>
+</html>

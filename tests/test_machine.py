@@ -91,6 +91,10 @@ class MachineTests(unittest.TestCase):
         finally:
             replayed.close()
 
+    def test_file_backed_journal_rejects_a_second_writer(self):
+        with self.assertRaisesRegex(RuntimeError, "already in use"):
+            DecimalMachine(self.journal)
+
     def test_tampered_journal_is_rejected(self):
         self.open_day()
         self.machine.close()

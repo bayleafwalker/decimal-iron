@@ -21,27 +21,34 @@ python -m decimal_iron demo --output artifacts/clearing-day
 python -m unittest discover -v
 ```
 
-## M1 — Physical legibility
+## M1 — Physical legibility (preliminary interface)
 
-- [ ] BCD register display and memory-field selector.
-- [ ] Physical key switch, single-step, halt and examine.
-- [ ] Moving-coil liquidity meter with real position-driven output.
-- [ ] Scarce exception / closing printer.
-- [ ] Accessible tablet enclosure.
+- [x] Model state-derived BCD register display, word-mark window, selectors, position-meter input and reconciliation beacon.
+- [x] Define board-neutral register, key feedback, flags, word-mark and meter signals in `rtl/panel_connector.sv`.
+- [x] Limit modeled deposit to reserved diagnostic cells; prevent panel controls from posting.
+- [ ] Select physical display, switches, moving-coil meter and exception printer.
+- [ ] Design and validate the accessible enclosure, pin assignments and electrical drivers.
 
-## M2 — FPGA authority
+See [hardware panel scaffold](hardware-panel.md). No physical panel has been built or validated.
 
-- [ ] Character memory with word marks.
-- [ ] Microcoded BCD ALU and addressing.
-- [ ] Input/output channels.
-- [ ] Run software-model and FPGA conformance vectors.
-- [ ] Switch authority to FPGA with a documented software fallback.
+## M2 — FPGA authority (preliminary RTL and software oracle)
 
-## M3 — Cloud-native archaeology
+- [x] Add a 256-cell character-memory RTL scaffold with word marks, signed BCD fields and a compact original ISA.
+- [x] Add halt/run/single-step, examine/deposit and record-channel signals.
+- [x] Share decimal transfer vectors with an optional Icarus Verilog testbench runner.
+- [x] Keep a Python CPU oracle and route ledger transfers through it.
+- [ ] Run the RTL testbench in an HDL simulator, synthesize and close timing.
+- [ ] Validate FPGA conformance and establish hardware authority with a documented fallback.
 
-- [ ] Synthetic member-bank Kubernetes deployments and traffic profiles.
-- [ ] Single-cursor screen scraper with bounded queue and unknown-outcome reconciliation.
-- [ ] Labelled intermediate translator strata.
-- [ ] Replayable chaos scenarios and dashboard projections.
+The RTL and testbench are source-only scaffolding in this environment. They have not been synthesized or simulator-validated.
 
-Do not build fictional strata as separate distributed services unless doing so creates measurable physical or educational value.
+## M3 — Cloud-native archaeology (preliminary implementation)
+
+- [x] Add three seeded, finite Kubernetes synthetic-bank producers with rate and request limits.
+- [x] Add a bounded durable outbox, single terminal worker, inquiry-based recovery and status projection.
+- [x] Add labeled JSON, XML, fixed-record and terminal translation layers with a checked host-record round trip.
+- [x] Add network policies that allow bank-to-gateway and gateway-to-terminal traffic only.
+- [ ] Deploy the manifest in a cluster and exercise restart, network and traffic scenarios.
+- [ ] Add richer replayable chaos profiles and operator dashboard projections.
+
+The strata are lightweight translators in the gateway process. They are visible for study and do not grant cloud components access to posting authority.

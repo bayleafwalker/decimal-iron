@@ -44,8 +44,11 @@ reconciliation difference.
 - Simulated day key positions: CLOSED / OPEN / CUT-OFF / SETTLE.
 - The key input and transition request are separate; the processor checks
   state, key position, conservation and reconciliation before accepting.
-- Processor controls for RUN / HALT / SINGLE STEP / EXAMINE / DEPOSIT remain
-  hardware work; the software slice models only the business-day key.
+- The virtual panel exposes state-derived register and word-mark signals,
+  member-position selection, examine, and scratch-only deposit. It cannot post,
+  reverse or settle.
+- RTL defines RUN / HALT / SINGLE STEP / EXAMINE / DEPOSIT signals; physical
+  switch debouncing and electrical behavior remain board work.
 - Beacon: `reconciliation_break_minor != 0`, sourced from the last
   reconciliation result only.
 - Register and liquidity instrumentation must derive from real machine state.
@@ -60,14 +63,29 @@ replay with the same journal reproduces the same report bytes and digest.
 
 A file-backed journal has one process owner at a time. The machine holds an
 exclusive OS lock for its lifetime; close it before opening the same journal
-for replay or recovery. A second process is refused before it can append from a
-stale journal head.
+for replay or recovery. A second process is refused before it can append from
+a stale journal head.
 
 The software adapter exposes an explicit unresolved outcome if both response
 and inquiry paths fail. It never invents a new payment id to make progress.
 
+## Gateway and cloud protocol contract
+
+The gateway accepts a JSON payment intent containing `payment_id`, `bank_id`,
+`source`, `destination`, `currency`, and integer `amount_minor`. It returns
+HTTP 202 while queued. Reusing the idempotency identity with different fields
+returns 409; a full bounded outbox returns retryable 503. Status reads come
+from the gateway outbox and expose the terminal journal sequence only after
+the processor returns it.
+
+The gateway has one delivery worker and one serialized terminal cursor. Its
+translators preserve the same id and integer penni through JSON, XML, a
+checksummed 96-column host record and the 24×80 terminal command. Network
+policies limit bank pods to the gateway and the gateway to the processor
+terminal. See [protocol strata](protocol-strata.md).
+
 ## Deferred contracts
 
-Currency conversion, external payment standards, 3270/VT bridges, FPGA channel
-signals and Kubernetes protocol strata remain future work. No external banking
-endpoint is configured.
+Currency conversion, external payment standards, 3270/VT bridges, hardware
+pin/electrical maps, and live cluster operational behavior remain future work.
+No external banking endpoint is configured.

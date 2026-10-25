@@ -111,7 +111,7 @@ class Journal:
         if fd is not None:
             os.close(fd)
 
-    def __enter__(self) -> Journal:
+    def __enter__(self) -> "Journal":
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
