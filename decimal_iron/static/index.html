@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Decimal Iron — Clearing Console</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">CENTRAL CLEARING / SOFTWARE REFERENCE MACHINE</div>
+        <h1>Decimal Iron</h1>
+        <p>The processor is the authority. This page is a byte-stream terminal.</p>
+      </header>
+      <section class="console-shell" aria-label="24 by 80 terminal">
+        <div class="console-topline"><span>OPERATOR CONSOLE 01</span><span id="connection">CONNECTING</span></div>
+        <pre id="screen" aria-live="polite" aria-label="Terminal display">Connecting to processor...</pre>
+        <textarea id="keyboard" aria-label="Terminal keyboard input" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+        <div class="console-foot"><span id="cursor-state">READY</span><span>ASCII BYTE STREAM · 24 × 80</span></div>
+      </section>
+      <section class="operator-notes">
+        <h2>Operator reference</h2>
+        <p>Type a command and press Enter. Amounts are integer penni; 100 penni = 1 FIM.</p>
+        <div class="command-list">
+          <code>KEY OPEN</code><code>OPEN 1982-10-01</code>
+          <code>PAY T001 FI01 FI02 FIM 4250</code><code>INQUIRE T001</code>
+          <code>REV T001 R001 reason</code><code>KEY CUT-OFF</code>
+          <code>CUTOFF</code><code>KEY SETTLE</code>
+          <code>SETTLE</code><code>RECONCILE</code>
+          <code>BREAK 100</code><code>CLEARBREAK</code>
+          <code>KEY CLOSED</code><code>CLOSE</code>
+        </div>
+        <p class="note">The red beacon reflects only the last reconciliation difference. Command faults appear on the console.</p>
+      </section>
+      <footer>All members, balances and instructions are synthetic. No banking network is connected.</footer>
+    </main>
+    <script src="/static/terminal.js" defer></script>
+  </body>
+</html>

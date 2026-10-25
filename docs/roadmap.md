@@ -2,16 +2,24 @@
 
 ## M0 — Executable vertical slice
 
-- [ ] Define terminal byte grammar and golden 24x80 fixtures.
-- [ ] Implement deterministic decimal machine model and journal.
-- [ ] Implement five core business rules and conserved postings.
-- [ ] Add simulated key-switch transitions and reconciliation-only beacon.
-- [ ] Build browser terminal as a byte-stream renderer.
-- [ ] Build terminal-driving payment adapter (no direct ledger API).
-- [ ] Produce a deterministic end-of-day print artifact.
-- [ ] Demonstrate restart/replay and unknown-outcome recovery.
+- [x] Define terminal byte grammar and golden 24×80 screen fixture.
+- [x] Implement deterministic decimal machine model and journal.
+- [x] Implement duplicate protection, debit limits, cut-off, reversal, reasoned override and conserved postings.
+- [x] Add simulated key-switch transitions and reconciliation-only beacon.
+- [x] Build browser terminal as a byte-stream renderer.
+- [x] Build terminal-driving payment adapter with one serialized cursor.
+- [x] Produce a deterministic end-of-day print artifact.
+- [x] Demonstrate restart/replay and unknown-outcome recovery.
 
-**Acceptance:** open day -> send payments -> observe position -> cut off -> settle -> reconcile -> print -> close; injected break illuminates only the beacon.
+**Acceptance:** open day → submit payments → observe positions → cut off → settle → reconcile → print → close; an injected nonzero break illuminates only the beacon, and clearing/reconciling it turns the beacon off. Journal restart reproduces the final positions and report.
+
+Run the reference implementation and demonstration:
+
+```sh
+python -m decimal_iron serve
+python -m decimal_iron demo --output artifacts/clearing-day
+python -m unittest discover -v
+```
 
 ## M1 — Physical legibility
 

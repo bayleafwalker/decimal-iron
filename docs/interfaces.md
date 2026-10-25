@@ -1,24 +1,68 @@
-# Interface contracts (provisional v0)
+# Interface contracts
 
 ## Terminal
 
-Fixed **24 rows × 80 columns** of single-byte characters. Transport is an ordered byte stream. No layout metadata crosses the boundary.
+The terminal contract is version 1: a fixed **24 rows × 80 columns** of
+single-byte ASCII cells carried in an ordered byte stream. The supported
+processor-to-terminal escape grammar is `ESC[2J`, `ESC[row;columnH`, and
+`ESC[K`; input is printable ASCII, CR/LF and backspace/delete. See
+[terminal-protocol.md](terminal-protocol.md) for the complete grammar and
+golden screen fixture.
 
-Minimal proposed control operations: clear, cursor position (row/column), erase to end of line, write characters, inbound attention/function key. Escape bytes and field encoding require a versioned conformance fixture before any hardware purchase. A real VT or 3270 terminal needs a suitable bridge; 3270 is block-mode, not a cable-only swap.
+The browser renders only this byte stream. Its static HTML is a transport
+shell; no layout metadata, business command API, HTML, CSS or database access
+crosses the processor boundary.
 
-The terminal automation adapter is a **single-writer state machine**. It must serialize interactions, match replies to submitted references, handle timeout/unknown outcomes and use read-back inquiries before retrying.
+The terminal automation adapter owns one serialized cursor. It sends the same
+text records as an operator, parses terminal bytes for the `RESULT` row,
+inquires after an unknown outcome, and retries only with the original
+idempotency identity. It has no ledger or journal reference.
 
 ## Payment record
 
-Define a versioned fixed-column record containing business date, source, destination, sequence, currency, integer-minor-unit amount, reference, operation and check digits. FIM is the initial currency; EUR belongs only in later adapter strata. Currency conversions, if added, must use explicit rational rates and rounding rules.
+The v1 terminal record is:
+
+```text
+PAY id source destination FIM amount-in-penni [override reason]
+```
+
+Ids are stable ASCII identities. FIM is explicit and amounts are positive
+integer penni (100 penni = 1 FIM). Each member position is integer minor units;
+no floating-point value participates in ledger arithmetic. A payment is
+recorded durably before its terminal acknowledgement. A retry with the same
+identity and same request returns the original journal sequence; reusing an id
+with different fields is rejected. A reversal appends a compensating event.
+
+The reference machine enforces a FIM 50,000.00 per-payment hard cap and a
+FIM 1,000.00 member debit limit. Crossing the member limit requires a non-empty
+reason, stored in the journal. The hard cap cannot be overridden. Closing
+requires a current reconciliation for the settled journal and a zero
+reconciliation difference.
 
 ## Physical controls
 
-- Day switch: CLOSED / OPEN / CUT-OFF / SETTLE, interpreted as requested transitions.
-- Processor controls: RUN / HALT / SINGLE STEP / EXAMINE / DEPOSIT.
-- Beacon: a hardware output sourced only from the processor's reconciliation-break register.
-- Analog meters: member available liquidity, scaled and calibrated from actual positions.
+- Simulated day key positions: CLOSED / OPEN / CUT-OFF / SETTLE.
+- The key input and transition request are separate; the processor checks
+  state, key position, conservation and reconciliation before accepting.
+- Processor controls for RUN / HALT / SINGLE STEP / EXAMINE / DEPOSIT remain
+  hardware work; the software slice models only the business-day key.
+- Beacon: `reconciliation_break_minor != 0`, sourced from the last
+  reconciliation result only.
+- Register and liquidity instrumentation must derive from real machine state.
 
-## Contract tests
+## Recovery and closing report
 
-Golden terminal frames (exactly 1920 cells), byte-stream cursor conformance, duplicate submission, lost acknowledgement, crash-after-journal-before-response, cut-off rejection, reversal, nonzero reconciliation break, replay identity and clean close.
+The JSONL journal is append-only and hash-chained. Every event is fsynced
+before acknowledgement. Startup validates sequence and hash links, then
+rebuilds balances, switch state, idempotency indexes and the reconciliation
+register. No wall-clock timestamp is included in the closing report, so a
+replay with the same journal reproduces the same report bytes and digest.
+
+The software adapter exposes an explicit unresolved outcome if both response
+and inquiry paths fail. It never invents a new payment id to make progress.
+
+## Deferred contracts
+
+Currency conversion, external payment standards, 3270/VT bridges, FPGA channel
+signals and Kubernetes protocol strata remain future work. No external banking
+endpoint is configured.

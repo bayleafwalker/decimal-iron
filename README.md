@@ -14,17 +14,25 @@ This is a working-machine project, not a historical replica or production paymen
 
 The old machine is the ledger authority. The cluster knows what it submitted; the settlement processor knows what posted. A red beacon illuminates **only** when the reconciled balance difference is nonzero.
 
-## First runnable slice
+## Run the M0 software slice
 
-1. Start a deterministic software model of the decimal machine.
-2. Open a business day using a physical-key-compatible input.
-3. Submit synthetic payments through a byte-stream terminal.
-4. Observe real balance changes in a 24×80 display and decimal-register model.
-5. Force cut-off, settle, reconcile and print a reproducible closing report.
-6. Inject a reconciliation break; verify the beacon invariant.
-7. Replace the software CPU with FPGA RTL without changing the terminal or settlement contracts.
+Python 3.11+ is sufficient; the reference machine and terminal server use only the standard library.
 
-See [architecture](docs/architecture.md), [interfaces](docs/interfaces.md), and [roadmap](docs/roadmap.md).
+```sh
+python -m decimal_iron serve
+```
+
+Open <http://127.0.0.1:8080/>. The browser is a 24×80 renderer for the processor's byte stream. It sends keyboard bytes; it has no payment or ledger API. Use `Ctrl+C` to stop the server. The append-only journal is written to `data/ledger.jsonl` and replayed at startup.
+
+Run the scripted end-of-day demonstration:
+
+```sh
+python -m decimal_iron demo --output artifacts/clearing-day
+```
+
+The output directory must be empty or new. The demo covers guarded day transitions, synthetic member payments, a reasoned limit override, idempotent reversal, a lost acknowledgement resolved by inquiry, net settlement, an injected reconciliation break, beacon recovery and journal replay. It writes a closing report and journal.
+
+Terminal commands and the exact output-byte grammar are specified in [the protocol contract](docs/terminal-protocol.md). See [architecture](docs/architecture.md), [interfaces](docs/interfaces.md), and [roadmap](docs/roadmap.md).
 
 ## Non-goals
 
@@ -32,7 +40,7 @@ No actual banking connectivity; no genuine customer information; no production p
 
 ## Status
 
-Design and initial project scaffold. No functional FPGA or settlement implementation is claimed yet.
+M0 is implemented as a deterministic Python reference machine, hash-chained append-only journal, 24×80 byte-stream terminal, browser renderer, single-cursor payment adapter and replayable end-of-day demo. It is not FPGA hardware; M1–M3 remain roadmap work.
 
 ## License
 
