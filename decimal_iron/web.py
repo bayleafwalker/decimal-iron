@@ -174,3 +174,4 @@ def serve(machine: DecimalMachine, host: str = "127.0.0.1", port: int = 8080) ->
         print("\nStopping terminal server.")
     finally:
         server.server_close()
+        machine.close()
