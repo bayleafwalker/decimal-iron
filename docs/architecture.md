@@ -15,13 +15,16 @@ Synthetic member banks (Kubernetes)
   -> screen parser -> modern projections
 ```
 
-The terminal is the only application-facing integration path. Hardware service/debug channels may exist but cannot bypass posting authority.
+The terminal is the only application-facing integration path. The Kubernetes
+gateway transforms requests and submits terminal bytes through one serialized
+cursor; its separate durable outbox is delivery state. Hardware service/debug
+channels may exist but cannot bypass posting authority.
 
 ## Decimal processor
 
 IBM 1401-*inspired*, not instruction-compatible: character-addressed memory with word marks, BCD decimal arithmetic, variable-length fields, microcoded ALU, simple branches, a few index registers, and record-oriented channels. Avoid MMU and general-purpose OS.
 
-Design the front panel concurrently with the ISA. Expose actual operand digits, position fields, address, word marks and channel state. Do not animate unrelated lights.
+Design the front panel concurrently with the ISA. Expose actual operand digits, position fields, address, word marks and channel state. Do not animate unrelated lights. The current web panel and RTL connector are preliminary signal models, not a physical panel.
 
 ## Core invariants
 

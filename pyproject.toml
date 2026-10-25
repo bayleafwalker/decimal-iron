@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decimal-iron"
+version = "0.1.0"
+description = "A deterministic decimal clearing machine with a byte-stream terminal"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Decimal Iron contributors" }]
+dependencies = []
+
+[project.scripts]
+decimal-iron = "decimal_iron.__main__:main"
+
+[tool.setuptools.package-data]
+decimal_iron = ["static/*"]
+
+[tool.setuptools.packages.find]
+include = ["decimal_iron*"]

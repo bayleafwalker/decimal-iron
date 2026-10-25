@@ -1,10 +1,14 @@
 __pycache__/
 .pytest_cache/
+.mypy_cache/
 .venv/
 .env
 *.pyc
+data/
+artifacts/
 build/
 dist/
+*.egg-info/
 *.vcd
 *.fst
 *.bit

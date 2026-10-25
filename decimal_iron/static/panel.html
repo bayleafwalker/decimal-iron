@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Decimal Iron — Front Panel</title>
+    <link rel="stylesheet" href="/static/panel.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="/">← Clearing console</a>
+        <div class="eyebrow">M1 INSTRUMENTATION MODEL / READS LIVE PROCESSOR STATE</div>
+        <h1>Decimal Iron <span>front panel</span></h1>
+      </header>
+
+      <section class="panel" aria-label="Decimal processor panel">
+        <div class="panel-header"><span>DI-01 · DECIMAL CLEARING PROCESSOR</span><span id="link-state">CONNECTING</span></div>
+        <div class="top-controls">
+          <div class="control-group">
+            <label for="day-key">DAY KEY</label>
+            <select id="day-key">
+              <option>CLOSED</option><option>OPEN</option><option>CUT-OFF</option><option>SETTLE</option>
+            </select>
+            <small>Physical input; state transition remains processor-guarded.</small>
+          </div>
+          <div class="status-lamps">
+            <div><i id="lamp-zero"></i><span>ZERO</span></div>
+            <div><i id="lamp-negative"></i><span>NEG</span></div>
+            <div><i id="lamp-carry"></i><span>CARRY</span></div>
+            <div><i id="lamp-overflow"></i><span>OVERFLOW</span></div>
+            <div><i id="lamp-halted"></i><span>HALTED</span></div>
+            <div><i id="lamp-beacon" class="red"></i><span>RECON BREAK</span></div>
+          </div>
+        </div>
+
+        <div class="readouts">
+          <div class="readout">
+            <div class="readout-heading"><span>SELECTED REGISTER</span><select id="register-select"><option>AC</option><option>PC</option><option>AR</option><option>IR</option><option>POSITION</option></select></div>
+            <div id="digit-display" class="digit-display" aria-label="Selected register BCD digit lamps"></div>
+            <div class="readout-foot"><span id="register-value">0</span><span id="register-meta">AC · 12 DIGITS</span></div>
+          </div>
+          <div class="readout meter-box">
+            <div class="readout-heading"><span>MEMBER LIQUIDITY</span><select id="member-select"></select></div>
+            <div class="meter" aria-label="Moving-coil meter from debit to credit">
+              <div class="meter-scale"><span>DEBIT</span><span>0</span><span>CREDIT</span></div>
+              <div class="meter-track"><div id="meter-needle"></div></div>
+              <div id="meter-value" class="meter-value">0.00 FIM</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="memory-readout">
+          <div class="readout-heading"><span>WORD-MARK WINDOW</span><span id="memory-label">AR 000</span></div>
+          <div id="wordmark-window" class="wordmark-window"></div>
+        </div>
+
+        <div class="bottom-readouts">
+          <div class="processor-state">
+            <div class="readout-heading">PROCESSOR STATE</div>
+            <dl>
+              <dt>BUSINESS DAY</dt><dd id="business-date">----</dd>
+              <dt>PHASE / KEY</dt><dd id="phase-key">CLOSED / CLOSED</dd>
+              <dt>LAST INSTRUCTION</dt><dd id="last-instruction">HALT</dd>
+              <dt>MICRO-OPS / ALU DIGITS</dt><dd id="cycle-count">0 / 0</dd>
+              <dt>JOURNAL RECORDS</dt><dd id="journal-count">0</dd>
+            </dl>
+          </div>
+          <div class="service-controls">
+            <div class="readout-heading">SERVICE CONTROLS</div>
+            <form id="examine-form"><label>EXAMINE ADDRESS <input id="examine-address" type="number" min="0" max="255" value="0"><button>EXAMINE</button></label></form>
+            <form id="deposit-form"><label>DEPOSIT SCRATCH <input id="deposit-address" type="number" min="249" max="255" value="249"><input id="deposit-character" type="number" min="0" max="15" value="0"><button>DEPOSIT</button></label></form>
+            <p id="service-result">DEPOSIT IS RESTRICTED TO DIAGNOSTIC SCRATCH CELLS 249–255.</p>
+          </div>
+        </div>
+      </section>
+      <p class="footnote">This is the software panel model. Its indicators are derived from the reference processor; GPIO, electrical calibration and board-level validation remain future work. The panel has no payment, reversal or settlement command.</p>
+    </main>
+    <script src="/static/panel.js" defer></script>
+  </body>
+</html>

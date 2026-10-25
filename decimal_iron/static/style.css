@@ -1,0 +1,64 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #101719;
+  color: #e4e9df;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 50% -20%, #253634 0, #101719 52rem);
+}
+
+main { width: min(1100px, calc(100% - 2rem)); margin: 0 auto; padding: 3.5rem 0 2rem; }
+
+header { margin: 0 0 2rem; }
+.eyebrow { color: #90a59b; font: 700 .72rem/1.2 ui-monospace, monospace; letter-spacing: .15em; }
+h1 { margin: .6rem 0 .25rem; font: 600 clamp(2.5rem, 6vw, 4.25rem)/1 ui-monospace, monospace; letter-spacing: -.07em; color: #f0f1dd; }
+header p { margin: .8rem 0 0; color: #a9b7af; }
+
+.console-shell {
+  position: relative;
+  padding: 1rem 1rem .75rem;
+  border: 1px solid #486052;
+  border-radius: 10px;
+  background: #07100e;
+  box-shadow: 0 16px 70px #0009, inset 0 0 32px #152a1a;
+}
+.console-topline, .console-foot {
+  display: flex; justify-content: space-between; gap: 1rem; color: #8a9b8e;
+  font: 700 .68rem/1.2 ui-monospace, monospace; letter-spacing: .1em;
+}
+#connection { color: #e0ba65; }
+#connection.connected { color: #83cf83; }
+#connection.failed { color: #e47e6a; }
+#screen {
+  overflow: auto; margin: .85rem 0; padding: 1rem; min-height: 27rem;
+  border: 1px solid #243d2a; border-radius: 4px; background: #041009;
+  color: #7dce83; text-shadow: 0 0 5px #4ea75b70;
+  font: 500 clamp(.5rem, 1.15vw, .88rem)/1.2 "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  white-space: pre; user-select: none;
+}
+#keyboard {
+  position: absolute; width: 1px; height: 1px; left: -1000px; top: 0;
+  opacity: 0; resize: none;
+}
+.console-foot { color: #5e7965; }
+.operator-notes { margin: 2rem 0 1.6rem; max-width: 780px; color: #adb9b0; }
+h2 { margin: 0 0 .6rem; color: #e4e9df; font: 600 1.2rem ui-monospace, monospace; }
+.operator-notes p { line-height: 1.6; }
+.command-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem .8rem; margin: 1rem 0; }
+.command-list code { overflow: hidden; padding: .45rem .6rem; border-left: 2px solid #587863; background: #182321; color: #c8d9c5; white-space: nowrap; }
+.note, footer { color: #819189; font-size: .9rem; }
+footer { padding-top: 1rem; border-top: 1px solid #293734; }
+
+@media (max-width: 680px) {
+  main { width: min(100% - 1rem, 1100px); padding-top: 2rem; }
+  .console-shell { padding: .7rem .45rem .6rem; }
+  #screen { min-height: auto; padding: .55rem; font-size: .52rem; line-height: 1.32; }
+  .command-list { grid-template-columns: 1fr; }
+}

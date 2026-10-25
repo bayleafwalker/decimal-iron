@@ -1,0 +1,26 @@
+[
+  {
+    "name": "positive-source-to-negative-destination",
+    "source_balance": 42500,
+    "destination_balance": -12500,
+    "amount_minor": 4275
+  },
+  {
+    "name": "negative-debit-crossing",
+    "source_balance": -950,
+    "destination_balance": 200,
+    "amount_minor": 300
+  },
+  {
+    "name": "sign-crossing",
+    "source_balance": 20,
+    "destination_balance": -20,
+    "amount_minor": 250
+  },
+  {
+    "name": "exact-zero-settlement",
+    "source_balance": 700,
+    "destination_balance": -700,
+    "amount_minor": 700
+  }
+]
