@@ -58,6 +58,11 @@ rebuilds balances, switch state, idempotency indexes and the reconciliation
 register. No wall-clock timestamp is included in the closing report, so a
 replay with the same journal reproduces the same report bytes and digest.
 
+A file-backed journal has one process owner at a time. The machine holds an
+exclusive OS lock for its lifetime; close it before opening the same journal
+for replay or recovery. A second process is refused before it can append from a
+stale journal head.
+
 The software adapter exposes an explicit unresolved outcome if both response
 and inquiry paths fail. It never invents a new payment id to make progress.
 
