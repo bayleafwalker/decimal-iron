@@ -37,8 +37,12 @@ class GatewayService:
             raise ValueError("max_queue must be positive")
         self.max_queue = max_queue
         self.pipeline = ProtocolPipeline(adapter)
-        self._queue: queue.Queue[_QueuedPayment | None] = queue.Queue(maxsize=max_queue)
+        self._queue: queue.Queue[_QueuedPayment] = queue.Queue(maxsize=max_queue)
         self._lock = threading.RLock()
+        self._stop_requested = threading.Event()
+        self._closing = False
+        self._close_db_when_worker_exits = False
+        self._db_closed = False
         if state_path is not None:
             Path(state_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(str(state_path) if state_path is not None else ":memory:", check_same_thread=False)
@@ -70,19 +74,39 @@ class GatewayService:
 
     def start(self) -> None:
         with self._lock:
+            if self._closing or self._db_closed:
+                raise RuntimeError("gateway service is closing or closed")
             if self._thread and self._thread.is_alive():
                 return
             self._thread = threading.Thread(target=self._work, name="decimal-iron-terminal-worker", daemon=True)
             self._thread.start()
 
-    def close(self, timeout: float = 5.0) -> None:
-        thread = self._thread
-        if thread and thread.is_alive():
-            self._queue.put(None)
-            thread.join(timeout)
+    def close(self, timeout: float = 5.0) -> bool:
+        """Stop accepting work and wait up to ``timeout`` seconds for the worker.
+
+        A timed-out worker keeps the SQLite connection until its current terminal
+        operation returns. Pending queue rows remain QUEUED for recovery on the
+        next start. The worker closes SQLite itself when it exits.
+        """
         with self._lock:
+            self._closing = True
+            thread = self._thread
+            if thread is not None and thread.is_alive():
+                self._close_db_when_worker_exits = True
+                self._stop_requested.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout)
+            if thread.is_alive():
+                return False
+        with self._lock:
+            self._close_db_locked()
+        return True
+
+    def _close_db_locked(self) -> None:
+        if not self._db_closed:
             self._db.commit()
             self._db.close()
+            self._db_closed = True
 
     def submit(self, body: object) -> tuple[int, dict[str, Any]]:
         try:
@@ -94,6 +118,8 @@ class GatewayService:
         trace = self.pipeline_trace(instruction)
         trace_json = json.dumps(trace.summary(), sort_keys=True, separators=(",", ":"))
         with self._lock:
+            if self._closing or self._db_closed:
+                return 503, {"error": "SERVICE_CLOSING", "retryable": True}
             existing = self._db.execute(
                 "SELECT request_hash, status, receipt_json, trace_json, error FROM payments WHERE payment_id=?",
                 (instruction.payment_id,),
@@ -176,47 +202,55 @@ class GatewayService:
         return [self._status_payload(payment_id, status, receipt, trace, error) for payment_id, status, receipt, trace, error in rows]
 
     def _work(self) -> None:
-        while True:
-            item = self._queue.get()
-            try:
-                if item is None:
-                    return
-                with self._lock:
-                    self._db.execute("UPDATE payments SET status='PROCESSING' WHERE payment_id=?", (item.payment_id,))
-                    self._db.commit()
+        try:
+            while not self._stop_requested.is_set():
                 try:
-                    receipt, trace = self.pipeline.submit(item.instruction)
-                    result_status = "POSTED"
-                    receipt_data = {
-                        "payment_id": receipt.payment_id,
-                        "journal_sequence": receipt.journal_sequence,
-                        "resolution": receipt.resolution,
-                    }
-                    error = None
-                    trace_json = json.dumps(trace.summary(), sort_keys=True, separators=(",", ":"))
-                except PaymentRejected as exc:
-                    result_status, receipt_data, error = "REJECTED", None, str(exc)
-                    trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
-                except UnknownOutcome as exc:
-                    result_status, receipt_data, error = "UNKNOWN_OUTCOME", None, str(exc)
-                    trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
-                except Exception as exc:
-                    result_status, receipt_data, error = "UNKNOWN_OUTCOME", None, f"terminal worker error: {exc}"
-                    trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
-                with self._lock:
-                    self._db.execute(
-                        "UPDATE payments SET status=?, receipt_json=?, trace_json=?, error=? WHERE payment_id=?",
-                        (
-                            result_status,
-                            json.dumps(receipt_data, sort_keys=True, separators=(",", ":")) if receipt_data else None,
-                            trace_json,
-                            error,
-                            item.payment_id,
-                        ),
-                    )
-                    self._db.commit()
-            finally:
-                self._queue.task_done()
+                    item = self._queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                try:
+                    with self._lock:
+                        if self._stop_requested.is_set():
+                            return
+                        self._db.execute("UPDATE payments SET status='PROCESSING' WHERE payment_id=?", (item.payment_id,))
+                        self._db.commit()
+                    try:
+                        receipt, trace = self.pipeline.submit(item.instruction)
+                        result_status = "POSTED"
+                        receipt_data = {
+                            "payment_id": receipt.payment_id,
+                            "journal_sequence": receipt.journal_sequence,
+                            "resolution": receipt.resolution,
+                        }
+                        error = None
+                        trace_json = json.dumps(trace.summary(), sort_keys=True, separators=(",", ":"))
+                    except PaymentRejected as exc:
+                        result_status, receipt_data, error = "REJECTED", None, str(exc)
+                        trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
+                    except UnknownOutcome as exc:
+                        result_status, receipt_data, error = "UNKNOWN_OUTCOME", None, str(exc)
+                        trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
+                    except Exception as exc:
+                        result_status, receipt_data, error = "UNKNOWN_OUTCOME", None, f"terminal worker error: {exc}"
+                        trace_json = json.dumps(item.trace.summary(), sort_keys=True, separators=(",", ":"))
+                    with self._lock:
+                        self._db.execute(
+                            "UPDATE payments SET status=?, receipt_json=?, trace_json=?, error=? WHERE payment_id=?",
+                            (
+                                result_status,
+                                json.dumps(receipt_data, sort_keys=True, separators=(",", ":")) if receipt_data else None,
+                                trace_json,
+                                error,
+                                item.payment_id,
+                            ),
+                        )
+                        self._db.commit()
+                finally:
+                    self._queue.task_done()
+        finally:
+            with self._lock:
+                if self._close_db_when_worker_exits:
+                    self._close_db_locked()
 
 
 def make_gateway_handler(service: GatewayService):

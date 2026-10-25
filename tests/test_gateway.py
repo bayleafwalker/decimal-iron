@@ -107,6 +107,49 @@ class GatewayTests(unittest.TestCase):
         finally:
             service.close()
 
+    def test_timed_out_close_keeps_database_open_until_blocked_worker_exits(self):
+        class BlockedAdapter:
+            def __init__(self):
+                import threading
+
+                self.entered = threading.Event()
+                self.release = threading.Event()
+
+            def post_payment(self, payment_id, source, destination, amount_minor, *, currency="FIM"):
+                self.entered.set()
+                if not self.release.wait(2):
+                    raise TimeoutError("test adapter was not released")
+                return PaymentReceipt(payment_id, 17, "ACKNOWLEDGED")
+
+            def processor_status(self):
+                return "OPEN"
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "gateway.sqlite3"
+            adapter = BlockedAdapter()
+            service = GatewayService(adapter, max_queue=2, state_path=state)
+            service.start()
+            self.assertEqual(service.submit(self.payment)[0], 202)
+            self.assertTrue(adapter.entered.wait(1), "worker did not enter the blocked adapter")
+
+            queued = {**self.payment, "payment_id": "BANK-1-000000000002"}
+            self.assertEqual(service.submit(queued)[0], 202)
+            self.assertFalse(service.close(timeout=0.01))
+            self.assertEqual(service.status(self.payment["payment_id"])["status"], "PROCESSING")
+            self.assertEqual(service.submit({**self.payment, "payment_id": "BANK-1-000000000003"})[0], 503)
+
+            adapter.release.set()
+            service._thread.join(1)
+            self.assertFalse(service._thread.is_alive())
+            self.assertTrue(service.close())
+
+            recovered = GatewayService(adapter, max_queue=2, state_path=state)
+            try:
+                self.assertEqual(recovered.status(self.payment["payment_id"])["status"], "POSTED")
+                self.assertEqual(recovered.status(queued["payment_id"])["status"], "QUEUED")
+            finally:
+                recovered.close()
+
 
 if __name__ == "__main__":
     unittest.main()
