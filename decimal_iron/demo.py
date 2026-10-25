@@ -93,9 +93,13 @@ def run_demo(output_dir: str | Path) -> dict[str, object]:
 
     report = machine.report_text()
     (output / "closing-report.txt").write_text(report, encoding="ascii")
+    machine.close()
     replayed = DecimalMachine(journal_path)
-    replay_report = replayed.report_text()
-    replay_matches = report == replay_report and machine.positions == replayed.positions
+    try:
+        replay_report = replayed.report_text()
+        replay_matches = report == replay_report and machine.positions == replayed.positions
+    finally:
+        replayed.close()
     if not replay_matches:
         raise AssertionError("journal replay did not reproduce balances and closing report")
 
