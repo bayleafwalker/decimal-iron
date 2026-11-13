@@ -3,6 +3,11 @@
 The cluster demo shows successive message shapes in one process. The formats
 are explicit project fixtures; they are not real FIM clearing standards.
 
+The separate [EUR replay statement](replay-exhibits.md) is an explicitly
+fictional integration layer. It derives converted turnover from actual
+journal records; it does not change these FIM payment translations or claim
+compatibility with historical banking standards.
+
 | Layer | Representation | Responsibility |
 | --- | --- | --- |
 | Modern bank | `cloud-json-v1` | Typed payment identity, member accounts, FIM, integer penni |

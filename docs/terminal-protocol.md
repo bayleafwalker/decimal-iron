@@ -44,6 +44,8 @@ REV original-id reversal-id [reason]
 CUTOFF
 SETTLE
 RECONCILE
+RECONCILE FIM|EUR
+CONVERT EUR OMIT|ACCOUNT
 BREAK signed-penni
 CLEARBREAK
 REPORT
@@ -55,6 +57,15 @@ The hardware-compatible key input and processor transition request are
 separate commands. For example, `KEY CUT-OFF` only moves the simulated switch;
 `CUTOFF` still fails unless the machine is open. `BREAK` and `CLEARBREAK` are
 synthetic reconciliation-fixture controls, not payment operations.
+
+The EUR statement commands extend the software command vocabulary while
+preserving the byte grammar and FIM posting record. `CONVERT` is accepted only
+for a settled, unclosed day and derives the statement from that day's journal.
+It leaves the retained reconciliation result unchanged. `RECONCILE EUR`
+returns `RESULT EUR_RECONCILED` and updates only the EUR scope. When that scope
+is active, its currency-labelled result appears on screen row 15 (one-based).
+`CLOSE` refuses stale or nonzero results in either active scope. The original
+FIM banner remains byte-for-byte unchanged until a EUR statement exists.
 
 ## Golden screen
 

@@ -1,0 +1,598 @@
+{
+  "schema": "decimal-iron-scenarios/v1",
+  "scope": "synthetic reference-software scenarios; not hardware qualification",
+  "scenarios": [
+    {
+      "id": "lost-acknowledgement",
+      "title": "Committed, but not acknowledged",
+      "summary": "The processor posts once. Its reply is lost. The terminal-only adapter inquires using the original payment identity.",
+      "steps": [
+        {
+          "id": "key-open",
+          "label": "Move the business-day key",
+          "action": {
+            "kind": "command",
+            "command": "KEY OPEN"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY",
+            "state": {
+              "key_position": "OPEN",
+              "phase": "CLOSED"
+            }
+          }
+        },
+        {
+          "id": "open",
+          "label": "Open the synthetic business day",
+          "action": {
+            "kind": "command",
+            "command": "OPEN 1982-10-01"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT OPENED",
+            "state": {
+              "phase": "OPEN"
+            }
+          }
+        },
+        {
+          "id": "payment",
+          "label": "Resolve the missing acknowledgement",
+          "action": {
+            "kind": "payment",
+            "payment_id": "T001",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 1200,
+            "fault": "after-commit-before-ack"
+          },
+          "expected": {
+            "receipt_resolution": "RECOVERED_BY_INQUIRY",
+            "state": {
+              "transaction_count": 1,
+              "positions": {
+                "FI01": -1200,
+                "FI02": 1200
+              },
+              "beacon_on": false
+            },
+            "transport": {
+              "payment_writes": 1,
+              "inquiries": 1,
+              "lost_replies": 1
+            }
+          },
+          "expected_checkpoints": {
+            "committed-unacknowledged": {
+              "state": {
+                "transaction_count": 1,
+                "positions": {
+                  "FI01": -1200,
+                  "FI02": 1200
+                }
+              },
+              "terminal_result": null
+            },
+            "reply-lost": {
+              "state": {
+                "transaction_count": 1
+              },
+              "terminal_result": null
+            },
+            "inquiry-result": {
+              "state": {
+                "transaction_count": 1
+              },
+              "terminal_prefix": "RESULT INQUIRY POSTED T001 SEQ"
+            }
+          }
+        },
+        {
+          "id": "duplicate",
+          "label": "Retry the same identity and payload",
+          "action": {
+            "kind": "payment",
+            "payment_id": "T001",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 1200,
+            "fault": "none"
+          },
+          "expected": {
+            "receipt_resolution": "IDEMPOTENT_DUPLICATE",
+            "state": {
+              "transaction_count": 1,
+              "positions": {
+                "FI01": -1200,
+                "FI02": 1200
+              }
+            }
+          }
+        },
+        {
+          "id": "key-cutoff",
+          "label": "Move the key to cut-off",
+          "action": {
+            "kind": "command",
+            "command": "KEY CUT-OFF"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "cutoff",
+          "label": "Close ordinary posting",
+          "action": {
+            "kind": "command",
+            "command": "CUTOFF"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT CUTOFF",
+            "state": {
+              "phase": "CUT-OFF"
+            }
+          }
+        },
+        {
+          "id": "key-settle",
+          "label": "Move the key to settlement",
+          "action": {
+            "kind": "command",
+            "command": "KEY SETTLE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "settle",
+          "label": "Settle the participant positions",
+          "action": {
+            "kind": "command",
+            "command": "SETTLE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT SETTLED",
+            "state": {
+              "phase": "SETTLED",
+              "positions": {
+                "FI01": 0,
+                "FI02": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "reconcile",
+          "label": "Reconcile the FIM ledger",
+          "action": {
+            "kind": "command",
+            "command": "RECONCILE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT RECONCILED",
+            "state": {
+              "beacon_on": false,
+              "reconciliation_scopes": {
+                "FIM": {
+                  "current": true,
+                  "difference_minor": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "key-close",
+          "label": "Move the key to closed",
+          "action": {
+            "kind": "command",
+            "command": "KEY CLOSED"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "close",
+          "label": "Close the reconciled business day",
+          "action": {
+            "kind": "command",
+            "command": "CLOSE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT CLOSED",
+            "state": {
+              "phase": "CLOSED",
+              "transaction_count": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "interrupted-before-delivery",
+      "title": "The request did not arrive",
+      "summary": "The adapter cannot assume whether an interrupted write reached the processor. Inquiry returns not found; the retry keeps its original identity.",
+      "steps": [
+        {
+          "id": "key-open",
+          "label": "Move the business-day key",
+          "action": {
+            "kind": "command",
+            "command": "KEY OPEN"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "open",
+          "label": "Open the synthetic business day",
+          "action": {
+            "kind": "command",
+            "command": "OPEN 1982-10-01"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT OPENED"
+          }
+        },
+        {
+          "id": "payment",
+          "label": "Inquire, then retry the same payment",
+          "action": {
+            "kind": "payment",
+            "payment_id": "T002",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 1200,
+            "fault": "before-delivery"
+          },
+          "expected": {
+            "receipt_resolution": "RETRIED_AFTER_NOT_FOUND",
+            "state": {
+              "transaction_count": 1,
+              "positions": {
+                "FI01": -1200,
+                "FI02": 1200
+              }
+            },
+            "transport": {
+              "payment_writes": 2,
+              "inquiries": 1,
+              "lost_replies": 0
+            }
+          },
+          "expected_checkpoints": {
+            "request-interrupted": {
+              "state": {
+                "transaction_count": 0,
+                "positions": {}
+              },
+              "terminal_result": null
+            },
+            "inquiry-result": {
+              "state": {
+                "transaction_count": 0,
+                "positions": {}
+              },
+              "terminal_prefix": "RESULT INQUIRY NOT_FOUND T002"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "euro-rounding-residue",
+      "title": "The euro statement leaves one cent unaccounted",
+      "summary": "A fictional 2002 integration converts the real day's FIM posting records. Individually rounded EUR items differ from the rounded aggregate. Both reconciliation scopes must be current and clear before closing.",
+      "steps": [
+        {
+          "id": "key-open",
+          "label": "Move the business-day key",
+          "action": {
+            "kind": "command",
+            "command": "KEY OPEN"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "open",
+          "label": "Open the fictional conversion-era business day",
+          "action": {
+            "kind": "command",
+            "command": "OPEN 2002-01-02"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT OPENED"
+          }
+        },
+        {
+          "id": "item-one",
+          "label": "Post the first FIM 1.00 item",
+          "action": {
+            "kind": "payment",
+            "payment_id": "E001",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 100,
+            "fault": "none"
+          },
+          "expected": {
+            "receipt_resolution": "ACKNOWLEDGED",
+            "state": {
+              "transaction_count": 1
+            }
+          }
+        },
+        {
+          "id": "item-two",
+          "label": "Post the second FIM 1.00 item",
+          "action": {
+            "kind": "payment",
+            "payment_id": "E002",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 100,
+            "fault": "none"
+          },
+          "expected": {
+            "receipt_resolution": "ACKNOWLEDGED",
+            "state": {
+              "transaction_count": 2
+            }
+          }
+        },
+        {
+          "id": "item-three",
+          "label": "Post the third FIM 1.00 item",
+          "action": {
+            "kind": "payment",
+            "payment_id": "E003",
+            "source": "FI01",
+            "destination": "FI02",
+            "amount_minor": 100,
+            "fault": "none"
+          },
+          "expected": {
+            "receipt_resolution": "ACKNOWLEDGED",
+            "state": {
+              "transaction_count": 3,
+              "positions": {
+                "FI01": -300,
+                "FI02": 300
+              }
+            }
+          }
+        },
+        {
+          "id": "key-cutoff",
+          "label": "Move the key to cut-off",
+          "action": {
+            "kind": "command",
+            "command": "KEY CUT-OFF"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "cutoff",
+          "label": "Close ordinary posting",
+          "action": {
+            "kind": "command",
+            "command": "CUTOFF"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT CUTOFF"
+          }
+        },
+        {
+          "id": "key-settle",
+          "label": "Move the key to settlement",
+          "action": {
+            "kind": "command",
+            "command": "KEY SETTLE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "settle",
+          "label": "Settle the FIM ledger",
+          "action": {
+            "kind": "command",
+            "command": "SETTLE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT SETTLED",
+            "state": {
+              "phase": "SETTLED",
+              "positions": {
+                "FI01": 0,
+                "FI02": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "reconcile-fim",
+          "label": "Verify the FIM ledger is clear",
+          "action": {
+            "kind": "command",
+            "command": "RECONCILE FIM"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT RECONCILED",
+            "state": {
+              "reconciliation_scopes": {
+                "FIM": {
+                  "current": true,
+                  "difference_minor": 0
+                }
+              },
+              "beacon_on": false
+            }
+          }
+        },
+        {
+          "id": "switch-era",
+          "label": "Prepare the EUR statement without a rounding adjustment",
+          "checkpoint": true,
+          "action": {
+            "kind": "command",
+            "command": "CONVERT EUR OMIT"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT EUR_STATEMENT",
+            "state": {
+              "beacon_on": false,
+              "conversion_statement": {
+                "currency": "EUR",
+                "source_amounts_minor": [
+                  100,
+                  100,
+                  100
+                ],
+                "item_amounts_minor": [
+                  17,
+                  17,
+                  17
+                ],
+                "item_total_minor": 51,
+                "aggregate_total_minor": 50,
+                "rounding_adjustment_minor": 0
+              },
+              "reconciliation_scopes": {
+                "EUR": {
+                  "active": true,
+                  "current": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "detect-residue",
+          "label": "Reconciliation exposes the omitted cent",
+          "checkpoint": true,
+          "action": {
+            "kind": "command",
+            "command": "RECONCILE EUR"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT EUR_RECONCILED",
+            "state": {
+              "beacon_on": true,
+              "reconciliation_scopes": {
+                "EUR": {
+                  "currency": "EUR",
+                  "unit": "cent",
+                  "current": true,
+                  "difference_minor": 1
+                },
+                "FIM": {
+                  "difference_minor": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "key-close",
+          "label": "Move the key to closed",
+          "action": {
+            "kind": "command",
+            "command": "KEY CLOSED"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT KEY"
+          }
+        },
+        {
+          "id": "refuse-close",
+          "label": "The clear FIM scope cannot hide an EUR break",
+          "action": {
+            "kind": "command",
+            "command": "CLOSE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT ERROR EUR_RECONCILIATION_BREAK",
+            "state": {
+              "phase": "SETTLED",
+              "beacon_on": true
+            }
+          }
+        },
+        {
+          "id": "account-residue",
+          "label": "Declare the minus-one-cent rounding adjustment",
+          "checkpoint": true,
+          "action": {
+            "kind": "command",
+            "command": "CONVERT EUR ACCOUNT"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT EUR_STATEMENT",
+            "state": {
+              "beacon_on": true,
+              "conversion_statement": {
+                "rounding_adjustment_minor": -1
+              },
+              "reconciliation_scopes": {
+                "EUR": {
+                  "current": false,
+                  "difference_minor": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "reconcile-corrected",
+          "label": "Reconcile the corrected EUR statement",
+          "action": {
+            "kind": "command",
+            "command": "RECONCILE EUR"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT EUR_RECONCILED",
+            "state": {
+              "beacon_on": false,
+              "reconciliation_scopes": {
+                "EUR": {
+                  "current": true,
+                  "difference_minor": 0
+                },
+                "FIM": {
+                  "current": true,
+                  "difference_minor": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "close",
+          "label": "Close with both declared scopes current and clear",
+          "action": {
+            "kind": "command",
+            "command": "CLOSE"
+          },
+          "expected": {
+            "terminal_prefix": "RESULT CLOSED",
+            "state": {
+              "phase": "CLOSED",
+              "transaction_count": 3
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

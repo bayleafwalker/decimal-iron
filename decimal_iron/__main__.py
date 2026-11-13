@@ -10,6 +10,7 @@ from .bank import run_synthetic_bank
 from .demo import run_demo
 from .gateway import serve_gateway
 from .machine import DecimalMachine
+from .replay import check_replay, encode_replay, export_replay
 from .web import serve
 
 
@@ -41,6 +42,12 @@ def main() -> None:
     demo_parser = subparsers.add_parser("demo", help="run the deterministic end-of-day demonstration")
     demo_parser.add_argument("--output", default="artifacts/clearing-day", help="new or empty output directory")
 
+    replay_parser = subparsers.add_parser("replay", help="execute shared fixtures and export checked replay evidence")
+    replay_destination = replay_parser.add_mutually_exclusive_group(required=True)
+    replay_destination.add_argument("--output", type=Path, help="write deterministic replay JSON")
+    replay_destination.add_argument("--check", type=Path, help="rerun and compare canonical values with existing replay JSON")
+    replay_parser.add_argument("--allow-uncommitted", action="store_true", help="allow local draft evidence, explicitly marked draft")
+
     args = parser.parse_args()
     if args.command in (None, "serve"):
         journal = Path(args.journal if args.command == "serve" else "data/ledger.jsonl")
@@ -52,6 +59,19 @@ def main() -> None:
         print(f"Closing report: {Path(args.output) / 'closing-report.txt'}")
         print(f"Journal: {Path(args.output) / 'journal.jsonl'}")
         print(f"Replay matches: {summary['replay_matches']}")
+    elif args.command == "replay":
+        try:
+            trace = export_replay(allow_uncommitted=args.allow_uncommitted)
+            encoded = encode_replay(trace)
+            if args.check:
+                check_replay(trace, args.check)
+                print(f"PASS: replay evidence matches {args.check}")
+            else:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(encoded, encoding="ascii")
+                print(f"{trace['verification']['status'].upper()}: {len(trace['scenarios'])} scenarios; evidence {args.output}")
+        except (ValueError, AssertionError, OSError) as exc:
+            parser.error(str(exc))
     elif args.command == "gateway":
         serve_gateway(
             host=args.host,

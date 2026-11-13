@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .cpu import ACCOUNT_CAPACITY, CPUFault, ReferenceCPU
+from .conversion import prepare_euro_statement, statement_difference
 from .journal import Journal, JournalCorruption
 
 MAX_PAYMENT_MINOR = 5_000_000  # FIM 50,000.00; hard processor limit.
@@ -92,12 +93,16 @@ class DecimalMachine:
         self.external_discrepancy_minor = 0
         self.reconciliation_break_minor = 0
         self.reconciliation_current = False
+        self.euro_statement: dict[str, Any] | None = None
+        self.euro_statement_sequence: int | None = None
+        self.euro_reconciliation_break_minor = 0
+        self.euro_reconciliation_current = False
         self._replay()
 
     @property
     def beacon_on(self) -> bool:
-        """The red output is driven only by the reconciliation register."""
-        return self.reconciliation_break_minor != 0
+        """A retained nonzero result in either declared scope drives the red output."""
+        return self.reconciliation_break_minor != 0 or self.euro_reconciliation_break_minor != 0
 
     @property
     def journal_head(self) -> str:
@@ -129,6 +134,10 @@ class DecimalMachine:
             self.external_discrepancy_minor = 0
             self.reconciliation_break_minor = 0
             self.reconciliation_current = False
+            self.euro_statement = None
+            self.euro_statement_sequence = None
+            self.euro_reconciliation_break_minor = 0
+            self.euro_reconciliation_current = False
         elif kind == "PAYMENT_POSTED":
             source, destination = payload["source"], payload["destination"]
             amount = payload["amount_minor"]
@@ -166,6 +175,13 @@ class DecimalMachine:
         elif kind == "RECONCILED":
             self.reconciliation_break_minor = payload["difference_minor"]
             self.reconciliation_current = True
+        elif kind == "EUR_STATEMENT_PREPARED":
+            self.euro_statement = copy.deepcopy(payload)
+            self.euro_statement_sequence = entry["seq"]
+            self.euro_reconciliation_current = False
+        elif kind == "EUR_RECONCILED":
+            self.euro_reconciliation_break_minor = payload["difference_minor"]
+            self.euro_reconciliation_current = True
         elif kind == "DAY_CLOSED":
             self.phase = "CLOSED"
         else:
@@ -234,8 +250,15 @@ class DecimalMachine:
             return CommandResult("CUTOFF", "ordinary postings are now closed", {"seq": entry["seq"]})
         if operation == "SETTLE" and len(parts) == 1:
             return self._settle()
-        if operation in {"RECON", "RECONCILE"} and len(parts) == 1:
-            return self._reconcile()
+        if operation in {"RECON", "RECONCILE"} and len(parts) in {1, 2}:
+            scope = parts[1].upper() if len(parts) == 2 else "FIM"
+            if scope == "FIM":
+                return self._reconcile()
+            if scope == "EUR":
+                return self._reconcile_euro()
+            raise RuleViolation("UNSUPPORTED_RECONCILIATION_SCOPE", "reconciliation scope must be FIM or EUR")
+        if operation == "CONVERT" and len(parts) == 3 and parts[1].upper() == "EUR":
+            return self._prepare_euro_statement(parts[2].upper())
         if operation == "BREAK" and len(parts) == 2:
             return self._inject_break(parts[1])
         if operation in {"CLEARBREAK", "CLEAR-BREAK"} and len(parts) == 1:
@@ -256,6 +279,13 @@ class DecimalMachine:
     def _open_day(self, day_text: str) -> CommandResult:
         if self.phase != "CLOSED" or self.key_position != "OPEN":
             raise RuleViolation("TRANSITION_GUARD", "set KEY OPEN while the machine is CLOSED before requesting OPEN")
+        # Closed days still permit statement corrections. A later OPEN must not
+        # erase a retained break or a now-stale reconciliation from that day.
+        if self.beacon_on or (self.business_date is not None and (
+            not self.reconciliation_current
+            or (self.euro_statement is not None and not self.euro_reconciliation_current)
+        )):
+            raise RuleViolation("PREVIOUS_RECONCILIATION_REQUIRED", "all previous-day scopes must be current and clear before OPEN")
         try:
             parsed = date.fromisoformat(day_text)
         except ValueError as exc:
@@ -407,8 +437,64 @@ class DecimalMachine:
             raise RuleViolation("RECONCILIATION_REQUIRED", "run RECONCILE against the current settled state before CLOSE")
         if self.reconciliation_break_minor != 0:
             raise RuleViolation("RECONCILIATION_BREAK", "day cannot close while the reconciliation difference is nonzero")
+        if self.euro_statement is not None and not self.euro_reconciliation_current:
+            raise RuleViolation("EUR_RECONCILIATION_REQUIRED", "reconcile the active EUR statement before CLOSE")
+        if self.euro_reconciliation_break_minor != 0:
+            raise RuleViolation("EUR_RECONCILIATION_BREAK", "day cannot close with an unresolved EUR statement difference")
         entry = self._append("DAY_CLOSED", {"business_date": self.business_date})
         return CommandResult("CLOSED", "business day closed", {"seq": entry["seq"]})
+
+    def _prepare_euro_statement(self, treatment: str) -> CommandResult:
+        if self.phase != "SETTLED":
+            raise RuleViolation("DAY_NOT_SETTLED", "prepare EUR statements only for the settled open business day")
+        if treatment not in {"OMIT", "ACCOUNT"}:
+            raise RuleViolation("BAD_RESIDUE_TREATMENT", "residue treatment must be OMIT or ACCOUNT")
+        posting_entries = [
+            entry for entry in self.journal.entries
+            if entry["kind"] in {"PAYMENT_POSTED", "PAYMENT_REVERSED"}
+            and entry["payload"].get("business_date") == self.business_date
+        ]
+        amounts = [
+            entry["payload"]["amount_minor"] * (-1 if entry["kind"] == "PAYMENT_REVERSED" else 1)
+            for entry in posting_entries
+        ]
+        statement = prepare_euro_statement(amounts, treatment)
+        payload = {
+            **statement,
+            "business_date": self.business_date,
+            "source_journal_head": self.journal_head,
+            "source_posting_sequences": [entry["seq"] for entry in posting_entries],
+            "basis": "business-day-posting-turnover",
+        }
+        entry = self._append("EUR_STATEMENT_PREPARED", payload)
+        return CommandResult("EUR_STATEMENT", "EUR statement prepared; reconciliation remains required", {"seq": entry["seq"]})
+
+    def _reconcile_euro(self) -> CommandResult:
+        if self.phase not in {"SETTLED", "CLOSED"}:
+            raise RuleViolation("DAY_NOT_SETTLED", "EUR reconciliation is available only after settlement")
+        if self.euro_statement is None:
+            raise RuleViolation("EUR_STATEMENT_REQUIRED", "prepare an EUR conversion statement before reconciliation")
+        difference = statement_difference(self.euro_statement)
+        entry = self._append("EUR_RECONCILED", {
+            "business_date": self.business_date,
+            "currency": "EUR",
+            "unit": "cent",
+            "statement_sequence": self.euro_statement_sequence,
+            "difference_minor": difference,
+        })
+        return CommandResult("EUR_RECONCILED", "EUR statement reconciliation " + ("break" if difference else "clear"), {
+            "seq": entry["seq"], "currency": "EUR", "difference_minor": difference,
+        })
+
+    def reconciliation_scopes(self) -> dict[str, dict[str, Any]]:
+        """Never collapse differently denominated reconciliation registers."""
+        return {
+            "FIM": {"currency": "FIM", "unit": "penni", "active": True,
+                    "current": self.reconciliation_current, "difference_minor": self.reconciliation_break_minor},
+            "EUR": {"currency": "EUR", "unit": "cent", "active": self.euro_statement is not None,
+                    "current": self.euro_reconciliation_current, "difference_minor": self.euro_reconciliation_break_minor,
+                    "statement_sequence": self.euro_statement_sequence},
+        }
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
@@ -419,6 +505,8 @@ class DecimalMachine:
                 "beacon_on": self.beacon_on,
                 "reconciliation_break_minor": self.reconciliation_break_minor,
                 "reconciliation_current": self.reconciliation_current,
+                "reconciliation_scopes": self.reconciliation_scopes(),
+                "conversion_statement": copy.deepcopy(self.euro_statement),
                 "positions": dict(sorted(self.positions.items())),
                 "journal_events": len(self.journal.entries),
                 "journal_head": self.journal.head,
@@ -461,6 +549,17 @@ class DecimalMachine:
                     "",
                 ]
             )
+            if self.euro_statement is not None:
+                lines.extend([
+                    "EUR conversion statement (separate from the FIM posting ledger):",
+                    f"  Basis: {self.euro_statement['basis']}",
+                    f"  Item total: {self.euro_statement['item_total_minor']} EUR cents",
+                    f"  Aggregate control: {self.euro_statement['aggregate_total_minor']} EUR cents",
+                    f"  Rounding adjustment: {self.euro_statement['rounding_adjustment_minor']} EUR cents",
+                    f"  Reconciliation difference: {self.euro_reconciliation_break_minor} EUR cents",
+                    f"  Reconciliation status: {'CURRENT' if self.euro_reconciliation_current else 'NOT CURRENT'}",
+                    "",
+                ])
             return "\n".join(lines)
 
     def report_digest(self) -> str:

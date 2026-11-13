@@ -53,6 +53,9 @@ class TerminalSession:
         for idx, (member, amount) in enumerate(positions[:7], start=5):
             put(idx, 0, f"{member:<10} {format_minor(amount)}")
         put(13, 0, f"JOURNAL RECORDS {summary['journal_events']:06d}  HEAD {summary['journal_head'][:16]}")
+        euro = summary["reconciliation_scopes"]["EUR"]
+        if euro["active"]:
+            put(14, 0, f"EUR STATEMENT RECON {euro['difference_minor']} cents {'CURRENT' if euro['current'] else 'NOT CURRENT'}; FIM posting ledger unchanged")
         put(15, 0, "KEY OPEN -> OPEN YYYY-MM-DD | KEY CUT-OFF -> CUTOFF")
         put(16, 0, "KEY SETTLE -> SETTLE | KEY CLOSED -> CLOSE | RECONCILE")
         put(17, 0, "PAY id src dst FIM penni [override reason] | INQUIRE id | REV id reversal-id [reason]")
@@ -62,7 +65,8 @@ class TerminalSession:
             put(20, 0, f"PREVIOUS: {self._history[-1]}")
         prompt = "> " + self._input.decode("ascii", "replace")
         put(21, 0, prompt[-COLUMNS:])
-        put(23, 0, "TYPE A COMMAND AND PRESS ENTER. ALL AMOUNTS ARE INTEGER PENNI.")
+        footer = "POSTING AMOUNTS" if euro["active"] else "ALL AMOUNTS"
+        put(23, 0, f"TYPE A COMMAND AND PRESS ENTER. {footer} ARE INTEGER PENNI.")
         return cells
 
     def feed(self, data: bytes) -> None:

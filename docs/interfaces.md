@@ -36,8 +36,25 @@ with different fields is rejected. A reversal appends a compensating event.
 The reference machine enforces a FIM 50,000.00 per-payment hard cap and a
 FIM 1,000.00 member debit limit. Crossing the member limit requires a non-empty
 reason, stored in the journal. The hard cap cannot be overridden. Closing
-requires a current reconciliation for the settled journal and a zero
-reconciliation difference.
+requires a current, clear FIM reconciliation for the settled journal and,
+when a EUR statement is active, a current, clear EUR reconciliation as well.
+
+## EUR statement extension
+
+`CONVERT EUR OMIT|ACCOUNT` prepares a separate statement from the settled
+business day's actual payment and reversal journal entries. It records their
+sequences, source journal head, signed FIM amounts, converted EUR items,
+aggregate control, rounding policy and explicit adjustment. `OMIT` is the
+deliberately broken scenario; `ACCOUNT` records the rounding adjustment.
+Neither accepts caller-supplied item lists or mutates FIM positions.
+
+`RECONCILE` and `RECONCILE FIM` retain the original FIM behavior.
+`RECONCILE EUR` compares EUR item totals plus the declared adjustment against
+the EUR aggregate control. The summary and panel expose
+`reconciliation_scopes.FIM` (penni) and `.EUR` (cents), each with `active`,
+`current` and `difference_minor`. Legacy `reconciliation_break_minor` and
+`reconciliation_current` fields retain their FIM meaning. The byte grammar
+and FIM payment record are unchanged. See [replay-exhibits.md](replay-exhibits.md).
 
 ## Physical controls
 
@@ -49,16 +66,17 @@ reconciliation difference.
   reverse or settle.
 - RTL defines RUN / HALT / SINGLE STEP / EXAMINE / DEPOSIT signals; physical
   switch debouncing and electrical behavior remain board work.
-- Beacon: `reconciliation_break_minor != 0`, sourced from the last
-  reconciliation result only.
+- Beacon: true when either FIM or EUR retains a nonzero reconciliation result.
+  Clearing one scope never hides the other. New input marks that scope stale
+  but does not itself change the beacon.
 - Register and liquidity instrumentation must derive from real machine state.
 
 ## Recovery and closing report
 
 The JSONL journal is append-only and hash-chained. Every event is fsynced
 before acknowledgement. Startup validates sequence and hash links, then
-rebuilds balances, switch state, idempotency indexes and the reconciliation
-register. No wall-clock timestamp is included in the closing report, so a
+rebuilds balances, switch state, idempotency indexes and the separate
+reconciliation registers. No wall-clock timestamp is included in the closing report, so a
 replay with the same journal reproduces the same report bytes and digest.
 
 A file-backed journal has one process owner at a time. The machine holds an
@@ -86,6 +104,6 @@ terminal. See [protocol strata](protocol-strata.md).
 
 ## Deferred contracts
 
-Currency conversion, external payment standards, 3270/VT bridges, hardware
+General multi-currency posting, external payment standards, 3270/VT bridges, hardware
 pin/electrical maps, and live cluster operational behavior remain future work.
 No external banking endpoint is configured.

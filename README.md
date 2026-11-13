@@ -12,7 +12,7 @@ This is a working-machine project, not a historical replica or production paymen
 - **2026:** Kubernetes-hosted synthetic banks, traffic generators, a terminal automation adapter and observability.
 - **Between:** intentionally thin, labelled protocol translators representing accumulated integration eras.
 
-The old machine is the ledger authority. The cluster knows what it submitted; the settlement processor knows what posted. A red beacon illuminates **only** when the reconciled balance difference is nonzero.
+The old machine is the ledger authority. The cluster knows what it submitted; the settlement processor knows what posted. A red beacon illuminates **only** when a declared reconciliation scope retains a nonzero difference. FIM and EUR differences remain separately labelled; clearing one cannot erase the other.
 
 ## Run the software reference stack
 
@@ -41,6 +41,35 @@ python -m decimal_iron demo --output artifacts/clearing-day
 ```
 
 The output directory must be empty or new. The demo covers guarded day transitions, synthetic member payments, a reasoned limit override, idempotent reversal, a lost acknowledgement resolved by inquiry, net settlement, an injected reconciliation break, beacon recovery and journal replay. It writes a closing report and journal.
+
+## Replay evidence for exhibits
+
+The shared [scenario fixture](decimal_iron/fixtures/replay-scenarios.json) runs
+against the actual file-backed machine, byte terminal and payment adapter.
+It covers an interrupted write, a commit whose acknowledgement is lost,
+same-identity retry, and a fictional EUR conversion integration. The last
+scenario compares three separately rounded FIM 1.00 items (EUR 0.51) with the
+rounded aggregate (EUR 0.50), detects the omitted cent, refuses to close, and
+then reconciles an explicit minus-one-cent rounding adjustment.
+
+```sh
+python -m unittest discover -v
+python -m decimal_iron replay --output artifacts/replay.json
+python -m decimal_iron replay --check artifacts/replay.json
+```
+
+Public evidence requires the executed source and fixtures to match the current
+Git commit. During development, `--allow-uncommitted` emits evidence explicitly
+marked `draft`. The export contains the revision, source and fixture digests,
+checkpoint assertions, journal replay results and deliberately broken controls
+that the fixtures reject. A site can project this JSON without implementing a
+second payment machine. See [the replay contract](docs/replay-exhibits.md).
+
+The core still posts and settles FIM integer penni. The EUR statement extension
+has a separate currency-labelled reconciliation scope. Preparing a statement
+never changes the beacon; only reconciliation changes its retained result.
+Physical meters, printer, 300-baud timing and a KESKUS game adapter have not
+been exercised by this runner and are reported as skipped.
 
 ## Run the terminal gateway locally
 
@@ -93,7 +122,8 @@ No actual banking connectivity; no genuine customer information; no production p
 The preliminary stack includes the M0 reference machine and demo, a
 state-derived virtual panel, an original 256-cell decimal CPU software model,
 board-neutral SystemVerilog core and panel signal contracts, shared transfer
-vectors, a terminal-only payment gateway with bounded persistent outbox,
+vectors, fixture-backed replay evidence, a separate EUR statement comparison,
+a terminal-only payment gateway with bounded persistent outbox,
 visible protocol translations, synthetic bank producers and Kubernetes
 manifests. FPGA synthesis, board wiring, container build, and cluster
 deployment remain unvalidated. The project is synthetic and is not a payment
