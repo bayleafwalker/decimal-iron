@@ -34,10 +34,11 @@ Design the front panel concurrently with the ISA. Expose actual operand digits, 
 4. The old processor alone decides posting outcomes.
 5. A business-day transition is requested by a maintained physical switch, but checked by the processor state machine.
 6. Cut-off forbids ordinary new-day postings until the next opening.
-7. The red beacon is exactly `reconciliation_break != 0`; all other failures use console/status indicators.
+7. The red beacon is true if any declared reconciliation scope retains a nonzero difference. FIM penni and EUR cents are never added or substituted. Only reconciliation of the matching scope changes its retained result; preparing new statement input only invalidates currentness. All other failures use console/status indicators.
 8. Replaying a closed-day journal reproduces the same closing balances and report.
 9. The 24x80 protocol has no browser, CSS, HTTP or terminal-specific assumptions.
 10. All traffic is synthetic, and no external banking endpoints are configured.
+11. `CLOSE` requires a current, clear FIM reconciliation and, when active, a current, clear EUR statement reconciliation. A later `OPEN` cannot erase a retained break or stale result after closed-day statement corrections.
 
 ## Failure and recovery
 
@@ -46,3 +47,8 @@ Journal before acknowledgement. On crash, replay journal and rebuild positions. 
 ## Scope of rules
 
 Duplicates, limits, cut-off, reversal, and override-with-reason; plus conservation and reconciliation. Avoid expanding into customer banking, AML, fraud scoring or full payment standards.
+
+The [EUR replay extension](replay-exhibits.md) compares journal-derived posting
+turnover in a separate statement. The posting ledger, CPU position words and
+settlement remain FIM. The fictional 2002 integration adds explicit rounding
+controls; it does not turn the FIM ledger into a multi-currency processor.

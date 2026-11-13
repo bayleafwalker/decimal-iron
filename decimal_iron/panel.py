@@ -93,6 +93,7 @@ class PanelController:
                     "business_date": summary["business_date"],
                     "key_position": summary["key_position"],
                     "beacon_on": summary["beacon_on"],
+                    "reconciliation_scopes": summary["reconciliation_scopes"],
                     "journal_events": summary["journal_events"],
                     "journal_head": summary["journal_head"],
                 },

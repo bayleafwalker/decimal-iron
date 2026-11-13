@@ -16,7 +16,7 @@ dependencies = []
 decimal-iron = "decimal_iron.__main__:main"
 
 [tool.setuptools.package-data]
-decimal_iron = ["static/*"]
+decimal_iron = ["static/*", "fixtures/*.json"]
 
 [tool.setuptools.packages.find]
 include = ["decimal_iron*"]

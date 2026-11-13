@@ -5,6 +5,13 @@ register and position values to BCD lamps, the word-mark window, status lamps,
 a signed meter input, and the red beacon. The beacon is driven only by
 `reconciliation_break_minor != 0`.
 
+That RTL input still models the original single FIM scope. The software
+reference now retains separate FIM and EUR statement results and derives its
+beacon from their logical OR. A currency-labelled multi-scope bridge to this
+RTL connector has not been implemented or qualified; the replay exporter
+reports hardware and RTL scenario adapters as skipped. EUR cents must never
+be passed through the FIM-named amount input to fake that bridge.
+
 `rtl/decimal_core.sv` is a synthesizable-oriented starter for the original
 character-addressed ISA: 256 byte cells, word marks, signed variable-length
 BCD fields, an accumulator, branches, channels, examine, halt and deposit. The
